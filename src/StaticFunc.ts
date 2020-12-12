@@ -37,14 +37,26 @@ export const onmessage = (e:MessageEvent): void => {
             });
             return;
         } else if(msgType === "CallObjMethod" || msgType === "CallMethod") {
-            tmpFn = msgType === "CallObjMethod" ? elmer.getValue(self, (<ICallMethodMsgData>msgData).obj)[(<ICallMethodMsgData>msgData).method] : self[(<ICallMethodMsgData>msgData).method];
-            if(typeof tmpFn === "function") {
-                let callResult = null;
+            const objKey = (<ICallMethodMsgData>msgData).obj;
+            const callbackName = (<ICallMethodMsgData>msgData).method;
+            let selfFunc:Function;
+            if(msgType === "CallObjMethod") {
+                let runCode = `var fn = ${objKey}.${callbackName};\r\n`;
                 if(dataType === "[object Array]") {
-                    callResult = tmpFn.apply(self, msgData.data);
+                    runCode += `return fn.apply(${objKey}, argv);\r\n`;
                 } else {
-                    callResult = tmpFn(msgData.data);
+                    runCode += `return fn(argv);\r\n`;
                 }
+                selfFunc = new Function("argv", runCode);
+            } else {
+                if(dataType === "[object Array]") {
+                    selfFunc = new Function('argv', `return ${callbackName}.apply(self, argv);`);
+                } else {
+                    selfFunc = new Function('argv', `return ${callbackName}(argv);`);
+                }
+            }
+            if(typeof selfFunc === "function") {
+                let callResult = selfFunc(msgData.data);
                 elmer.sendMsg({
                     data: callResult,
                     id: msgData.id,
@@ -91,7 +103,7 @@ export const objectToWorkerData = (obj:object): WorkerObjectData => {
     }
     return result;
 };
-export const objectToWorkerCode = (obj:object, className:string): WorkerObjectData => {
+export const objectToWorkerCode = (obj:object, className:string): string => {
     const innerObjKey = className + (new Date()).format("YYYYMMDDHisms");
     let result:any = "(function(){\r\n";
     result += `    function ${className}(){};\r\n`;
@@ -122,7 +134,7 @@ export const objectToWorkerCode = (obj:object, className:string): WorkerObjectDa
         }
     }
     result += `    var ${innerObjKey} = new ${className}();\r\n`;
-    result += `    return ${innerObjKey};`;
+    result += `    return ${innerObjKey};\r\n`;
     result += "})();\r\n";
     result = result.replace(/\sthis\./g, [" ", innerObjKey, "."].join(""))
         .replace(/\!this\./g, ["!", innerObjKey, "."].join(""))
@@ -130,6 +142,26 @@ export const objectToWorkerCode = (obj:object, className:string): WorkerObjectDa
         ;
     return result;
 };
+
+export const classToWorkerCode = (func:Function): string => {
+    // const innerObjKey = className + (new Date()).format("YYYYMMDDHisms");
+    const coreCode = func.toString().replace(/^function\s[a-z0-9\_]{1,}\s*\(/i,"");
+    const defineName = func.name;
+    let code = `(function(){\r\n`;
+    code += `    function ${defineName}(${coreCode};\r\n`;
+    Object.keys(func).map((funcKey: string) => {
+        let fCode = func[funcKey];
+        if(typeof fCode === "object") {
+            fCode = JSON.stringify(fCode, null, 4);
+        } else if(typeof fCode === "function") {
+            fCode = fCode.toString();
+        }
+        code += `    ${defineName}.${funcKey} = ${fCode};\r\n`;
+    });
+    code += `    return ${defineName};\r\n`;
+    code += "})();";
+    return code;
+} 
 
 export const workerDataToObject = (eventData:WorkerObjectData) => {
     const result = {};

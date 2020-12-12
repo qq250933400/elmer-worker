@@ -1,6 +1,4 @@
-import { Common } from "elmer-common";
-
-export class ElmerWorkerCore extends Common {
+export class ElmerWorkerCore {
     sendMsg(msg:any): void {
         (<any>self["postMessage"])(msg);
     }

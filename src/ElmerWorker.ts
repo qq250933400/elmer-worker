@@ -1,10 +1,11 @@
-import { Common } from "elmer-common";
+import { Common, StaticCommon } from "elmer-common";
 import { ElmerWorkerCore } from "./ElmerWorkerCore";
 import { ElmerWorkerMsgEvent } from "./ElmerWorkerType";
 import { ICallMethodMsgData,ICallMethodResponse, IInitMsgData, IInitMsgResponse, IMsgData } from "./EnumMessage";
 import {
     __spreadArrays,
     funcToStr,
+    classToWorkerCode,
     objectToWorkerCode,
     objectToWorkerData,
     onmessage,
@@ -34,7 +35,7 @@ export class ElmerWorker extends Common {
         this.createWorker();
         this.bindEvent();
     }
-    callMethod(methodName: string, params:any[]): Promise<any> {
+    callMethod(methodName: string, ...params:any[]): Promise<any> {
         return new Promise((resolve, reject) => {
             const id = this.getRandomID();
             this.sendMsg(<ICallMethodMsgData>{
@@ -49,7 +50,7 @@ export class ElmerWorker extends Common {
             };
         });
     }
-    callObjMethod(objKey: string, methodName: string, params: any[]):Promise<any> {
+    callObjMethod(objKey: string, methodName: string, ...params: any[]):Promise<any> {
         return new Promise((resolve, reject) => {
             const id = this.getRandomID();
             this.sendMsg({
@@ -129,9 +130,8 @@ export class ElmerWorker extends Common {
         return result;
     }
     private createWorker(): void {
-        const codeBuffer = Buffer.from(this.initBlobCode());
-        const blob = new Blob([codeBuffer]);
-        this.worker = new Worker(window.URL.createObjectURL(blob));
+        const myBlob = new Blob([this.initBlobCode()]);
+        this.worker = new Worker(window.URL.createObjectURL(myBlob));
     }
     private bindEvent(): void {
         this.worker.addEventListener("message", this.message.bind(this));
@@ -204,13 +204,15 @@ export class ElmerWorker extends Common {
     private initBlobCode(): string {
         const strToFuncCode = strToFunc.toString();
         const coreCode = objectToWorkerCode(new ElmerWorkerCore(), "ElmerWorkerCore");
+        const staticCode = classToWorkerCode(StaticCommon);
         const code = [];
         code.push("var strToFunc = " + strToFuncCode);
         code.push("var __spreadArrays = " + funcToStr(__spreadArrays));
         code.push("var workerDataToObject = " + funcToStr(workerDataToObject));
+        code.push("var utils = " + staticCode);
         code.push("var elmer = " + coreCode);
-        code.push("onmessage = " + funcToStr(onmessage));
         code.push(this.getInitPropsCode());
+        code.push("onmessage = " + funcToStr(onmessage));
         return code.join("\r\n");
     }
 }
