@@ -1,6 +1,6 @@
 {
     "name": "elmer-worker",
-    "version": "1.0.9",
+    "version": "1.0.10",
     "description": "worker, blob worker",
     "typings": "lib/index.d.ts",
     "main": "lib/index.js",
